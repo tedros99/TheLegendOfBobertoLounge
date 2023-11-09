@@ -1,0 +1,17 @@
+[gd_scene load_steps=4 format=2]
+
+[ext_resource path="res://img/Mahal props (outdoors).png" type="Texture" id=1]
+[ext_resource path="res://entities/MahalPropsOD.gd" type="Script" id=2]
+
+[sub_resource type="CircleShape2D" id=1]
+radius = 11.0
+
+[node name="MahalPropsOD" type="StaticBody2D"]
+script = ExtResource( 2 )
+
+[node name="Sprite" type="Sprite" parent="."]
+texture = ExtResource( 1 )
+vframes = 2
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+shape = SubResource( 1 )

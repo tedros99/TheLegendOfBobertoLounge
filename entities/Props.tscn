@@ -1,0 +1,64 @@
+[gd_scene load_steps=8 format=2]
+
+[ext_resource path="res://img/props.png" type="Texture" id=1]
+[ext_resource path="res://entities/Props.gd" type="Script" id=2]
+
+[sub_resource type="RectangleShape2D" id=3]
+extents = Vector2( 16, 6.5 )
+
+[sub_resource type="RectangleShape2D" id=4]
+extents = Vector2( 10, 5.5 )
+
+[sub_resource type="RectangleShape2D" id=5]
+extents = Vector2( 3, 3.5 )
+
+[sub_resource type="RectangleShape2D" id=6]
+extents = Vector2( 16, 9.5 )
+
+[sub_resource type="CircleShape2D" id=2]
+radius = 12.0007
+
+[node name="Props" type="StaticBody2D"]
+script = ExtResource( 2 )
+
+[node name="Sprite" type="Sprite" parent="."]
+texture = ExtResource( 1 )
+hframes = 2
+vframes = 3
+frame = 3
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+visible = false
+position = Vector2( 0, -0.5 )
+shape = SubResource( 3 )
+disabled = true
+
+[node name="Collision2" type="CollisionShape2D" parent="."]
+visible = false
+position = Vector2( 0, -0.5 )
+shape = SubResource( 4 )
+disabled = true
+
+[node name="Collision3" type="CollisionShape2D" parent="."]
+visible = false
+position = Vector2( 0, -0.5 )
+shape = SubResource( 5 )
+disabled = true
+
+[node name="Collision4" type="CollisionShape2D" parent="."]
+visible = false
+position = Vector2( 0, 0.5 )
+shape = SubResource( 6 )
+disabled = true
+
+[node name="Collision5" type="CollisionShape2D" parent="."]
+visible = false
+position = Vector2( 0, 0.125 )
+shape = SubResource( 2 )
+disabled = true
+
+[node name="Collision6" type="CollisionPolygon2D" parent="."]
+visible = false
+position = Vector2( 0, -0.5 )
+polygon = PoolVector2Array( -15, -9.5, -4, 1.5, -8, 2.5, -10, 3.5, -10, 13.5, 1, 4.5, 13, 8.5, 13, 5.5, 8, 1.5, 15, -2.5, 14, -3.5, 6, -3.5, 13, -12.5, 6, -12.5, -2, -7.5, -8, -10.5 )
+disabled = true

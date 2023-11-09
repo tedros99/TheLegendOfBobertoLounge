@@ -1,0 +1,236 @@
+[gd_scene load_steps=7 format=2]
+
+[ext_resource path="res://menus/LevelSelect.gd" type="Script" id=1]
+[ext_resource path="res://theme.tres" type="Theme" id=2]
+[ext_resource path="res://fonts/videotype.ttf" type="DynamicFontData" id=3]
+
+[sub_resource type="DynamicFont" id=18]
+size = 32
+font_data = ExtResource( 3 )
+
+[sub_resource type="Shader" id=16]
+code = "/*
+	CRT shader for Godot Engine by Yui Kinomoto @arlez80
+*/
+shader_type canvas_item;
+
+const float PI = 3.1415926535;
+
+// ブラウン管のガラスの曲がり具合（フラットなやつは0.0でいいかな）
+uniform float crt_curve : hint_range( 0.0, 1.0 ) = 0.02;
+// 走査線の濃さ
+uniform float crt_scan_line_color : hint_range( 0.0, 1.0 ) = 0.347;
+// 光量
+uniform float aperture_grille_rate : hint_range( 0.0, 1.0 ) = 0.4;
+// RFスイッチ的ブラー
+uniform float rf_switch_esque_blur : hint_range( 0.0, 1.0 ) = 1.0;
+// 白色ノイズ
+uniform float white_noise_rate : hint_range( 0.0, 1.0 ) = 0.0;
+
+float random( vec2 pos )
+{ 
+	return fract(sin(dot(pos, vec2(12.9898,78.233))) * 43758.5453);
+}
+
+void fragment( )
+{
+	// ガラスの曲がり具合
+	vec2 crt_curve_shift = ( vec2( 1.0, 1.0 ) - sin( UV.yx * PI ) ) * crt_curve;
+	vec2 crt_curve_scale = vec2( 1.0, 1.0 ) + crt_curve_shift * 2.0;
+	vec2 texture_fixed_uv = UV * crt_curve_scale - crt_curve_shift;
+	vec2 fixed_uv = SCREEN_UV * crt_curve_scale - crt_curve_shift;
+	// 範囲外を消す
+	float enable_color = float( 0.0 <= texture_fixed_uv.x && texture_fixed_uv.x <= 1.0 && 0.0 <= texture_fixed_uv.y && texture_fixed_uv.y <= 1.0 );
+
+	// ガラスの曲がり具合から元色を取得 + RFスイッチ的ブラー
+	COLOR.rgb = (
+		(
+			texture( SCREEN_TEXTURE, fixed_uv ).rgb
+		*	( 1.0 - rf_switch_esque_blur * 0.5 )
+		)
+	+	(
+			(
+				texture( SCREEN_TEXTURE, fixed_uv + vec2( -SCREEN_PIXEL_SIZE.x * 3.1, 0.0 ) ).rgb
+			+	texture( SCREEN_TEXTURE, fixed_uv + vec2( SCREEN_PIXEL_SIZE.x * 3.1, 0.0 ) ).rgb
+			)
+			*	( rf_switch_esque_blur * 0.25 )	// （RFノイズ）0.5 * （テクスチャから読んだ2箇所を半分にしたい）0.5
+		)
+	) * enable_color;
+	COLOR.a = 1.0;
+
+	// ------------------------------------------------
+	// 以下はアパーチャグリル上の1ピクセルごとの処理
+	vec2 aperture_grille_pixel = vec2( floor( ( fixed_uv.x / SCREEN_PIXEL_SIZE.x ) / 3.0 ) * 3.0, fixed_uv.y );
+
+	// 白色ノイズ
+	float white_noise = random( aperture_grille_pixel + vec2( sin( TIME * 0.543254 ), cos( TIME * 0.254323563 ) ) );
+	COLOR.rgb = mix(
+		COLOR.rgb
+	,	vec3( white_noise, white_noise, white_noise )
+	,	white_noise_rate * enable_color
+	);
+
+	// アパーチャグリル再現
+	float aperture_grille_point = mod( ( ( SCREEN_UV.x * crt_curve_scale.x ) - crt_curve_shift.x ) / SCREEN_PIXEL_SIZE.x, 3.0 );
+	float aperture_grille_r_rate = clamp( 1.0 - aperture_grille_point, 0.0, 1.0 ) + clamp( aperture_grille_point - 2.0, 0.0, 1.0 );
+	float aperture_grille_g_rate = clamp( 1.0 - abs( 1.0 - aperture_grille_point ), 0.0, 1.0 );
+	float aperture_grille_b_rate = 1.0 - aperture_grille_r_rate - aperture_grille_g_rate;
+	COLOR = clamp(
+		COLOR * vec4(
+			normalize( vec3(
+				clamp( aperture_grille_r_rate, aperture_grille_rate, 1.0 )
+			,	clamp( aperture_grille_g_rate, aperture_grille_rate, 1.0 )
+			,	clamp( aperture_grille_b_rate, aperture_grille_rate, 1.0 )
+			) )
+		,	1.0
+		)
+	,	vec4( 0.0, 0.0, 0.0, 0.0 )
+	,	vec4( 1.0, 1.0, 1.0, 1.0 )
+	);
+
+	// 走査線
+	COLOR = mix(
+		COLOR
+	,	vec4( 0.0, 0.0, 0.0, 1.0 )
+	,	float( 0 == int( fixed_uv.y / SCREEN_PIXEL_SIZE.y ) % 2 ) * crt_scan_line_color
+	);
+}
+"
+
+[sub_resource type="ShaderMaterial" id=17]
+shader = SubResource( 16 )
+shader_param/crt_curve = 0.02
+shader_param/crt_scan_line_color = 0.0
+shader_param/aperture_grille_rate = 0.162
+shader_param/rf_switch_esque_blur = 0.416
+shader_param/white_noise_rate = 0.0
+
+[node name="LevelSelect" type="Control"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource( 1 )
+
+[node name="ColorRect2" type="ColorRect" parent="."]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="ScrollContainer" type="ScrollContainer" parent="."]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+margin_left = -256.0
+margin_top = -149.5
+margin_right = 256.0
+margin_bottom = 149.5
+scroll_horizontal_enabled = false
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ScrollContainer"]
+margin_right = 500.0
+margin_bottom = 414.0
+rect_min_size = Vector2( 500, 300 )
+alignment = 1
+
+[node name="Label" type="Label" parent="ScrollContainer/VBoxContainer"]
+margin_right = 500.0
+margin_bottom = 40.0
+custom_colors/font_color = Color( 0, 0, 0, 1 )
+custom_fonts/font = SubResource( 18 )
+text = "LEVEL SELECT"
+align = 1
+valign = 1
+
+[node name="E1F1" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 44.0
+margin_right = 500.0
+margin_bottom = 74.0
+theme = ExtResource( 2 )
+text = "EPISODE 1 - CARDINAL 404 - FLOOR 1"
+
+[node name="E1F2" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 78.0
+margin_right = 500.0
+margin_bottom = 108.0
+theme = ExtResource( 2 )
+text = "EPISODE 1 - CARDINAL 404 - FLOOR 2"
+
+[node name="E1F3" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 112.0
+margin_right = 500.0
+margin_bottom = 142.0
+theme = ExtResource( 2 )
+text = "EPISODE 1 - CARDINAL 404 - FLOOR 3"
+
+[node name="E2F1" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 146.0
+margin_right = 500.0
+margin_bottom = 176.0
+theme = ExtResource( 2 )
+text = "EPISODE 2 - ONE LAST GAME - FLOOR 1"
+
+[node name="E2F2" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 180.0
+margin_right = 500.0
+margin_bottom = 210.0
+theme = ExtResource( 2 )
+text = "EPISODE 2 - ONE LAST GAME - BOSS FIGHT"
+
+[node name="E3F1" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 214.0
+margin_right = 500.0
+margin_bottom = 244.0
+theme = ExtResource( 2 )
+text = "EPISODE 3 - MAHAL'D - FLOOR 1"
+
+[node name="E3F2" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 248.0
+margin_right = 500.0
+margin_bottom = 278.0
+theme = ExtResource( 2 )
+text = "EPISODE 3 - MAHAL'D - FLOOR 2"
+
+[node name="E4F1" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 282.0
+margin_right = 500.0
+margin_bottom = 312.0
+theme = ExtResource( 2 )
+text = "EPISODE 4 - END OF THE SLOTH - FLOOR 1"
+
+[node name="E4F2" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 316.0
+margin_right = 500.0
+margin_bottom = 346.0
+theme = ExtResource( 2 )
+text = "EPISODE 4 - END OF THE SLOTH - FLOOR 2"
+
+[node name="E4F3" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 350.0
+margin_right = 500.0
+margin_bottom = 380.0
+theme = ExtResource( 2 )
+text = "EPISODE 4 - END OF THE SLOTH - BOSS FIGHT"
+
+[node name="Return" type="Button" parent="ScrollContainer/VBoxContainer"]
+margin_top = 384.0
+margin_right = 500.0
+margin_bottom = 414.0
+theme = ExtResource( 2 )
+text = "RETURN TO MAIN MENU"
+
+[node name="ColorRect" type="ColorRect" parent="."]
+material = SubResource( 17 )
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E1F1" to="." method="_on_E1F1_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E1F2" to="." method="_on_E1F2_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E1F3" to="." method="_on_E1F3_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E2F1" to="." method="_on_E2F1_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E2F2" to="." method="_on_E2F2_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E3F1" to="." method="_on_E3F1_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E3F2" to="." method="_on_E3F2_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E4F1" to="." method="_on_E4F1_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E4F2" to="." method="_on_E4F2_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/E4F3" to="." method="_on_E4F3_pressed"]
+[connection signal="pressed" from="ScrollContainer/VBoxContainer/Return" to="." method="_on_Return_pressed"]

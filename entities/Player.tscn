@@ -1,0 +1,416 @@
+[gd_scene load_steps=21 format=2]
+
+[ext_resource path="res://img/player.png" type="Texture" id=1]
+[ext_resource path="res://entities/Player.gd" type="Script" id=2]
+[ext_resource path="res://fonts/videotype.ttf" type="DynamicFontData" id=3]
+[ext_resource path="res://img/timer.png" type="Texture" id=4]
+[ext_resource path="res://img/mouse.png" type="Texture" id=5]
+[ext_resource path="res://theme.tres" type="Theme" id=6]
+[ext_resource path="res://font.tres" type="DynamicFont" id=7]
+
+[sub_resource type="CapsuleShape2D" id=3]
+radius = 5.0
+height = 6.0
+
+[sub_resource type="CircleShape2D" id=8]
+radius = 13.0
+
+[sub_resource type="DynamicFont" id=12]
+size = 32
+outline_size = 3
+outline_color = Color( 0, 0, 0, 1 )
+font_data = ExtResource( 3 )
+
+[sub_resource type="DynamicFont" id=5]
+outline_size = 3
+outline_color = Color( 0, 0, 0, 1 )
+font_data = ExtResource( 3 )
+
+[sub_resource type="DynamicFont" id=13]
+size = 32
+outline_size = 3
+outline_color = Color( 0, 0, 0, 1 )
+font_data = ExtResource( 3 )
+
+[sub_resource type="Animation" id=14]
+resource_name = "flash"
+length = 1.5
+tracks/0/type = "value"
+tracks/0/path = NodePath("Label:rect_position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0, 0.5 ),
+"transitions": PoolRealArray( 1, 1 ),
+"update": 0,
+"values": [ Vector2( 147.5, -72 ), Vector2( 147.5, 160 ) ]
+}
+tracks/1/type = "value"
+tracks/1/path = NodePath("Label:modulate")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/keys = {
+"times": PoolRealArray( 0, 0.7, 1.5 ),
+"transitions": PoolRealArray( 1, 1, 1 ),
+"update": 0,
+"values": [ Color( 1, 1, 1, 1 ), Color( 1, 1, 1, 1 ), Color( 1, 1, 1, 0 ) ]
+}
+
+[sub_resource type="Shader" id=2]
+code = "/*
+	CRT shader for Godot Engine by Yui Kinomoto @arlez80
+*/
+shader_type canvas_item;
+
+const float PI = 3.1415926535;
+
+// ブラウン管のガラスの曲がり具合（フラットなやつは0.0でいいかな）
+uniform float crt_curve : hint_range( 0.0, 1.0 ) = 0.02;
+// 走査線の濃さ
+uniform float crt_scan_line_color : hint_range( 0.0, 1.0 ) = 0.347;
+// 光量
+uniform float aperture_grille_rate : hint_range( 0.0, 1.0 ) = 0.4;
+// RFスイッチ的ブラー
+uniform float rf_switch_esque_blur : hint_range( 0.0, 1.0 ) = 1.0;
+// 白色ノイズ
+uniform float white_noise_rate : hint_range( 0.0, 1.0 ) = 0.0;
+
+float random( vec2 pos )
+{ 
+	return fract(sin(dot(pos, vec2(12.9898,78.233))) * 43758.5453);
+}
+
+void fragment( )
+{
+	// ガラスの曲がり具合
+	vec2 crt_curve_shift = ( vec2( 1.0, 1.0 ) - sin( UV.yx * PI ) ) * crt_curve;
+	vec2 crt_curve_scale = vec2( 1.0, 1.0 ) + crt_curve_shift * 2.0;
+	vec2 texture_fixed_uv = UV * crt_curve_scale - crt_curve_shift;
+	vec2 fixed_uv = SCREEN_UV * crt_curve_scale - crt_curve_shift;
+	// 範囲外を消す
+	float enable_color = float( 0.0 <= texture_fixed_uv.x && texture_fixed_uv.x <= 1.0 && 0.0 <= texture_fixed_uv.y && texture_fixed_uv.y <= 1.0 );
+
+	// ガラスの曲がり具合から元色を取得 + RFスイッチ的ブラー
+	COLOR.rgb = (
+		(
+			texture( SCREEN_TEXTURE, fixed_uv ).rgb
+		*	( 1.0 - rf_switch_esque_blur * 0.5 )
+		)
+	+	(
+			(
+				texture( SCREEN_TEXTURE, fixed_uv + vec2( -SCREEN_PIXEL_SIZE.x * 3.1, 0.0 ) ).rgb
+			+	texture( SCREEN_TEXTURE, fixed_uv + vec2( SCREEN_PIXEL_SIZE.x * 3.1, 0.0 ) ).rgb
+			)
+			*	( rf_switch_esque_blur * 0.25 )	// （RFノイズ）0.5 * （テクスチャから読んだ2箇所を半分にしたい）0.5
+		)
+	) * enable_color;
+	COLOR.a = 1.0;
+
+	// ------------------------------------------------
+	// 以下はアパーチャグリル上の1ピクセルごとの処理
+	vec2 aperture_grille_pixel = vec2( floor( ( fixed_uv.x / SCREEN_PIXEL_SIZE.x ) / 3.0 ) * 3.0, fixed_uv.y );
+
+	// 白色ノイズ
+	float white_noise = random( aperture_grille_pixel + vec2( sin( TIME * 0.543254 ), cos( TIME * 0.254323563 ) ) );
+	COLOR.rgb = mix(
+		COLOR.rgb
+	,	vec3( white_noise, white_noise, white_noise )
+	,	white_noise_rate * enable_color
+	);
+
+	// アパーチャグリル再現
+	float aperture_grille_point = mod( ( ( SCREEN_UV.x * crt_curve_scale.x ) - crt_curve_shift.x ) / SCREEN_PIXEL_SIZE.x, 3.0 );
+	float aperture_grille_r_rate = clamp( 1.0 - aperture_grille_point, 0.0, 1.0 ) + clamp( aperture_grille_point - 2.0, 0.0, 1.0 );
+	float aperture_grille_g_rate = clamp( 1.0 - abs( 1.0 - aperture_grille_point ), 0.0, 1.0 );
+	float aperture_grille_b_rate = 1.0 - aperture_grille_r_rate - aperture_grille_g_rate;
+	COLOR = clamp(
+		COLOR * vec4(
+			normalize( vec3(
+				clamp( aperture_grille_r_rate, aperture_grille_rate, 1.0 )
+			,	clamp( aperture_grille_g_rate, aperture_grille_rate, 1.0 )
+			,	clamp( aperture_grille_b_rate, aperture_grille_rate, 1.0 )
+			) )
+		,	1.0
+		)
+	,	vec4( 0.0, 0.0, 0.0, 0.0 )
+	,	vec4( 1.0, 1.0, 1.0, 1.0 )
+	);
+
+	// 走査線
+	COLOR = mix(
+		COLOR
+	,	vec4( 0.0, 0.0, 0.0, 1.0 )
+	,	float( 0 == int( fixed_uv.y / SCREEN_PIXEL_SIZE.y ) % 2 ) * crt_scan_line_color
+	);
+}
+"
+
+[sub_resource type="ShaderMaterial" id=15]
+shader = SubResource( 2 )
+shader_param/crt_curve = 0.02
+shader_param/crt_scan_line_color = 0.0
+shader_param/aperture_grille_rate = 0.162
+shader_param/rf_switch_esque_blur = 0.416
+shader_param/white_noise_rate = 0.0
+
+[sub_resource type="Animation" id=10]
+resource_name = "Baseball Bat"
+length = 0.5
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0, 0.1, 0.2 ),
+"transitions": PoolRealArray( 1, 1, 1 ),
+"update": 1,
+"values": [ 6, 7, 6 ]
+}
+
+[sub_resource type="Animation" id=11]
+resource_name = "Gordon Crowbar"
+length = 0.5
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0, 0.1, 0.2 ),
+"transitions": PoolRealArray( 1, 1, 1 ),
+"update": 1,
+"values": [ 8, 9, 8 ]
+}
+
+[sub_resource type="Animation" id=6]
+resource_name = "Mac"
+length = 0.5
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0, 0.1, 0.2 ),
+"transitions": PoolRealArray( 1, 1, 1 ),
+"update": 1,
+"values": [ 2, 1, 2 ]
+}
+
+[sub_resource type="Animation" id=7]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0 ),
+"transitions": PoolRealArray( 1 ),
+"update": 0,
+"values": [ 1 ]
+}
+
+[sub_resource type="Animation" id=9]
+resource_name = "Rezac"
+length = 0.5
+tracks/0/type = "value"
+tracks/0/path = NodePath("Sprite:frame")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/keys = {
+"times": PoolRealArray( 0, 0.1, 0.2 ),
+"transitions": PoolRealArray( 1, 1, 1 ),
+"update": 1,
+"values": [ 3, 5, 3 ]
+}
+
+[node name="Player" type="KinematicBody2D"]
+script = ExtResource( 2 )
+
+[node name="Sprite" type="Sprite" parent="."]
+texture = ExtResource( 1 )
+hframes = 4
+vframes = 4
+frame = 1
+
+[node name="Collision" type="CollisionShape2D" parent="."]
+shape = SubResource( 3 )
+
+[node name="SlashZone" type="Area2D" parent="."]
+
+[node name="Collision" type="CollisionShape2D" parent="SlashZone"]
+shape = SubResource( 8 )
+disabled = true
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="HUD" type="Control" parent="CanvasLayer"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Label" type="Label" parent="CanvasLayer/HUD"]
+anchor_top = 1.0
+anchor_bottom = 1.0
+margin_left = 40.0
+margin_top = -80.0
+margin_right = 435.0
+margin_bottom = -40.0
+custom_fonts/font = SubResource( 12 )
+text = "NO WEAPON"
+
+[node name="Mouse" type="TextureRect" parent="CanvasLayer/HUD"]
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+margin_left = -129.0
+margin_top = -84.0
+margin_right = -39.0
+margin_bottom = 1.0
+texture = ExtResource( 5 )
+
+[node name="Fire" type="Label" parent="CanvasLayer/HUD/Mouse"]
+margin_left = -8.0
+margin_top = 12.0
+margin_right = 32.0
+margin_bottom = 32.0
+custom_fonts/font = SubResource( 5 )
+text = "Fire"
+align = 1
+valign = 1
+
+[node name="Grab" type="Label" parent="CanvasLayer/HUD/Mouse"]
+anchor_left = 1.0
+anchor_right = 1.0
+margin_left = -29.0
+margin_top = 12.0
+margin_right = 11.0
+margin_bottom = 32.0
+custom_fonts/font = SubResource( 5 )
+text = "Grab"
+align = 1
+valign = 1
+
+[node name="Timer" type="TextureRect" parent="CanvasLayer/HUD"]
+margin_right = 180.0
+margin_bottom = 60.0
+texture = ExtResource( 4 )
+
+[node name="Label" type="Label" parent="CanvasLayer/HUD/Timer"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+margin_left = -25.0
+margin_top = -16.0
+margin_right = 20.0
+margin_bottom = 16.0
+custom_fonts/font = ExtResource( 7 )
+text = "20:00"
+align = 1
+valign = 1
+
+[node name="MissionComplete" type="Control" parent="CanvasLayer"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="Label" type="Label" parent="CanvasLayer/MissionComplete"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+margin_left = -182.5
+margin_top = -252.0
+margin_right = 182.5
+margin_bottom = -212.0
+custom_fonts/font = SubResource( 13 )
+text = "OBJECTIVE COMPLETE"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="CanvasLayer/MissionComplete"]
+reset_on_save = false
+anims/flash = SubResource( 14 )
+
+[node name="PauseMenu" type="Control" parent="CanvasLayer"]
+pause_mode = 2
+visible = false
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+margin_left = -330.0
+margin_top = -180.0
+margin_right = 330.0
+margin_bottom = 180.0
+
+[node name="ColorRect2" type="ColorRect" parent="CanvasLayer/PauseMenu"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color( 0.941176, 0.196078, 0.196078, 0.27451 )
+
+[node name="VBoxContainer" type="VBoxContainer" parent="CanvasLayer/PauseMenu"]
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+margin_left = -140.5
+margin_top = -47.0
+margin_right = 140.5
+margin_bottom = 47.0
+
+[node name="Label" type="Label" parent="CanvasLayer/PauseMenu/VBoxContainer"]
+margin_right = 281.0
+margin_bottom = 40.0
+custom_fonts/font = SubResource( 13 )
+text = "MISSION FAILED"
+align = 1
+valign = 1
+
+[node name="Restart" type="Button" parent="CanvasLayer/PauseMenu/VBoxContainer"]
+margin_top = 44.0
+margin_right = 281.0
+margin_bottom = 74.0
+theme = ExtResource( 6 )
+text = "RESTART"
+
+[node name="GiveUp" type="Button" parent="CanvasLayer/PauseMenu/VBoxContainer"]
+margin_top = 78.0
+margin_right = 281.0
+margin_bottom = 108.0
+theme = ExtResource( 6 )
+text = "GIVE UP"
+
+[node name="ColorRect" type="ColorRect" parent="CanvasLayer"]
+visible = false
+material = SubResource( 15 )
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="Timer" type="Timer" parent="."]
+wait_time = 120.0
+one_shot = true
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="."]
+"anims/Baseball Bat" = SubResource( 10 )
+"anims/Gordon Crowbar" = SubResource( 11 )
+anims/Mac = SubResource( 6 )
+anims/RESET = SubResource( 7 )
+anims/Rezac = SubResource( 9 )
+
+[connection signal="body_entered" from="SlashZone" to="." method="_on_SlashZone_body_entered"]
+[connection signal="pressed" from="CanvasLayer/PauseMenu/VBoxContainer/Restart" to="." method="_on_Restart_pressed"]
+[connection signal="pressed" from="CanvasLayer/PauseMenu/VBoxContainer/GiveUp" to="." method="_on_GiveUp_pressed"]
+[connection signal="timeout" from="Timer" to="." method="_on_Timer_timeout"]
