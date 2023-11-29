@@ -1,2 +1,3 @@
-# the_legend_of_boberto_lounge
- Student video game project.
+# The Legend of Boberto Lounge
+Programming by Tedros Lafalaise.
+Art and Level Design by Jake Andersen.
